@@ -56,12 +56,11 @@ def vers_jeu_de_donnees(X, y, seuil=50.0):
     Transforme les données en jeu de données tabulaire avec une cible binaire.
     target = 1 si Y >= seuil, sinon 0.
     """
-    df = pd.DataFrame({"X": X, "Y": y})
-    df["target"] = (df["Y"] >= seuil).astype(int)
+    df = pd.DataFrame({"Notes": X, "Assiduité": y})
+    df["target"] = (df["Assiduité"]>= seuil).astype(int)
     return df
 
-
-def exporter_csv(df, chemin="donnees.csv"):
+def exporter_csv(df, chemin="data/raw/donnees.csv"):
     """Exporte le jeu de données au format CSV."""
     df.to_csv(chemin, index=False)
     return chemin
