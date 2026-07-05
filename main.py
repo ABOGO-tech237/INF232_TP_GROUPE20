@@ -44,8 +44,8 @@ def data_genertor(graine, nb_echantillons=1000, bruit=5.0):
     """
     rng = np.random.default_rng(graine)
 
-    X = rng.uniform(0, 20, size=nb_echantillons)
-    y = 5 * X + rng.normal(0, bruit, size=nb_echantillons)
+    X = np.round(rng.uniform(0, 20, size=nb_echantillons),1)
+    y = np.round(5 * X + rng.normal(0, bruit, size=nb_echantillons),0)
     y = np.clip(y, 0, 100)
 
     return X, y
@@ -57,7 +57,7 @@ def vers_jeu_de_donnees(X, y, seuil=50.0):
     target = 1 si Y >= seuil, sinon 0.
     """
     df = pd.DataFrame({"Notes": X, "Assiduité": y})
-    df["target"] = (df["Assiduité"]>= seuil).astype(int)
+    df[""] = (df["Assiduité"]>= seuil).astype(int)
     return df
 
 def exporter_csv(df, chemin="data/raw/donnees.csv"):
