@@ -1,0 +1,2 @@
+modele,rmse_test,mae_test,r2_test,coefficient_assiduite,intercept,equation
+Régression linéaire,1.0208158044480464,0.8349701809400947,0.9686379429201297,0.1981116385969644,0.014649394423649653,Notes ≈ 0.198 × Assiduité + 0.015

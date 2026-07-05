@@ -1,0 +1,4 @@
+algorithme,silhouette,rang
+K-Means,0.5803196797489241,1
+GMM (mélange gaussien),0.5773394791085925,2
+Agglomératif (Ward),0.5328737794625978,3

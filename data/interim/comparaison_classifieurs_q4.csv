@@ -1,0 +1,4 @@
+modele,accuracy_test,precision_test,recall_test,f1_test,auc_test,rang
+Arbre de décision,1.0,1.0,1.0,1.0,1.0,1
+Régression logistique,0.99,1.0,0.9797979797979798,0.9897959183673469,0.9993999399939995,2
+KNN (k=5),0.99,1.0,0.9797979797979798,0.9897959183673469,0.9996999699969997,3

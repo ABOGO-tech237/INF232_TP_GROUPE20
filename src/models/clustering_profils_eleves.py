@@ -1,98 +1,175 @@
-import pandas as pd
+"""
+Question 3 — Classification non supervisée (clustering K-Means).
+
+Identifie des profils d'élèves à partir de Notes et Assiduité uniquement,
+sans utiliser l'orientation déjà recommandée (target).
+"""
+
+from pathlib import Path
+import sys
+
 import matplotlib.pyplot as plt
-from sklearn.preprocessing import StandardScaler
+import pandas as pd
 from sklearn.cluster import KMeans
 from sklearn.metrics import silhouette_score
 
-# on charge depuis data/raw, ce script tourne depuis src/models/
-df = pd.read_csv("../../data/raw/donnees.csv")
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-# le fichier peut avoir les colonnes X/Y (ancienne version) ou déjà
-# Notes/Assiduité (nouvelle version) selon qui l'a régénéré, donc on gère les deux
-if "X" in df.columns and "Y" in df.columns:
-    df = df.rename(columns={"X": "Notes", "Y": "Assiduité"})
+from src.data.chargement import (
+    RACINE_PROJET,
+    charger_donnees_brutes,
+    chemin_figures,
+)
+from src.features.preparation import extraire_features_numeriques, standardiser_features
 
-# on ne garde que Notes et Assiduité, pas target
-# le but c'est justement de voir si des groupes ressortent sans regarder l'orientation déjà donnée
-X_features = df[["Notes", "Assiduité"]]
 
-# la note va de 0 à 20 et l'assiduité de 0 à 100, donc si on standardise pas
-# l'assiduité va écraser la note dans le calcul des distances
-scaler = StandardScaler()
-X_scaled = scaler.fit_transform(X_features)
+def evaluer_nombre_clusters(X_scaled, k_max: int = 8) -> tuple[list, list]:
+    """
+    Méthode du coude + score de silhouette pour choisir K.
 
-# on sait pas encore combien de groupes existent, donc on teste plusieurs K
-# et on regarde ce qui donne les groupes les plus nets (coude + silhouette)
-inerties = []
-silhouettes = []
-K_range = range(1, 9)
+    L'inertie diminue quand K augmente ; le « coude » indique le compromis.
+    La silhouette mesure la cohésion / séparation des groupes (proche de 1 = net).
+    """
+    inerties = []
+    silhouettes = []
+    k_range = range(1, k_max + 1)
 
-for k in K_range:
-    km = KMeans(n_clusters=k, random_state=42, n_init=10)
-    labels_k = km.fit_predict(X_scaled)
-    inerties.append(km.inertia_)
-    if k > 1:  # le score de silhouette n'est défini que pour k >= 2
-        silhouettes.append(silhouette_score(X_scaled, labels_k))
+    for k in k_range:
+        km = KMeans(n_clusters=k, random_state=42, n_init=10)
+        labels_k = km.fit_predict(X_scaled)
+        inerties.append(km.inertia_)
+        if k > 1:
+            silhouettes.append(silhouette_score(X_scaled, labels_k))
+        else:
+            silhouettes.append(None)
+
+    return list(k_range), inerties, silhouettes
+
+
+def tracer_choix_k(k_range, inerties, silhouettes, chemin_sortie: Path) -> None:
+    """Graphiques d'aide au choix du nombre de clusters."""
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
+
+    ax1.plot(k_range, inerties, marker="o")
+    ax1.set_xlabel("Nombre de clusters (K)")
+    ax1.set_ylabel("Inertie intra-cluster")
+    ax1.set_title("Méthode du coude")
+    ax1.grid(True, alpha=0.3)
+
+    ax2.plot(k_range[1:], silhouettes[1:], marker="o", color="darkorange")
+    ax2.set_xlabel("Nombre de clusters (K)")
+    ax2.set_ylabel("Score de silhouette")
+    ax2.set_title("Score de silhouette selon K")
+    ax2.grid(True, alpha=0.3)
+
+    plt.tight_layout()
+    plt.savefig(chemin_sortie, dpi=150)
+    plt.close()
+
+
+def decrire_clusters(centroides_reels: pd.DataFrame) -> pd.DataFrame:
+    """Attribue fragile / intermédiaire / solide selon la note moyenne du cluster."""
+    centroides_reels = centroides_reels.copy().sort_values("Note_moyenne").reset_index(drop=True)
+    libelles = ["Profil fragile : notes basses et/ou faible assiduité — accompagnement renforcé",
+                "Profil intermédiaire : résultats et assiduité modérés",
+                "Profil solide : bonnes notes et forte assiduité"]
+    if len(centroides_reels) == 3:
+        centroides_reels["description_pedagogique"] = libelles
     else:
-        silhouettes.append(None)
+        descriptions = []
+        for _, row in centroides_reels.iterrows():
+            note, assid = row["Note_moyenne"], row["Assiduite_moyenne"]
+            if note >= 14 and assid >= 70:
+                descriptions.append(libelles[2])
+            elif note >= 8 and assid >= 40:
+                descriptions.append(libelles[1])
+            else:
+                descriptions.append(libelles[0])
+        centroides_reels["description_pedagogique"] = descriptions
+    return centroides_reels
 
-fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
 
-ax1.plot(list(K_range), inerties, marker="o")
-ax1.set_xlabel("Nombre de clusters (K)")
-ax1.set_ylabel("Inertie intra-cluster")
-ax1.set_title("Méthode du coude")
-ax1.grid(True, alpha=0.3)
+def executer_clustering(k_optimal: int = 3) -> dict:
+    """Pipeline complet Question 3 — K-Means uniquement."""
+    df = charger_donnees_brutes()
+    features = extraire_features_numeriques(df)
+    X_scaled, scaler = standardiser_features(features)
 
-ax2.plot(list(K_range)[1:], silhouettes[1:], marker="o", color="darkorange")
-ax2.set_xlabel("Nombre de clusters (K)")
-ax2.set_ylabel("Score de silhouette")
-ax2.set_title("Score de silhouette selon K")
-ax2.grid(True, alpha=0.3)
+    k_range, inerties, silhouettes = evaluer_nombre_clusters(X_scaled)
+    dossier_fig = chemin_figures()
 
-plt.tight_layout()
-plt.savefig("../../reports/figures/graphique_choix_nombre_clusters.png", dpi=150)
-plt.close()
+    tracer_choix_k(
+        k_range,
+        inerties,
+        silhouettes,
+        dossier_fig / "graphique_choix_nombre_clusters.png",
+    )
 
-print("Inerties par K :", dict(zip(K_range, inerties)))
-print("Silhouettes par K :", dict(zip(K_range, silhouettes)))
+    # K=3 : compromis visible sur le coude et bon score de silhouette
+    kmeans = KMeans(n_clusters=k_optimal, random_state=42, n_init=10)
+    df["cluster"] = kmeans.fit_predict(X_scaled)
 
-# d'après le graphique du coude, 3 semble être le bon compromis
-K_OPTIMAL = 3
+    centroides_reels = pd.DataFrame(
+        scaler.inverse_transform(kmeans.cluster_centers_),
+        columns=["Note_moyenne", "Assiduite_moyenne"],
+    )
+    centroides_reels["effectif"] = df["cluster"].value_counts().sort_index().values
+    resume = decrire_clusters(centroides_reels)
 
-kmeans_final = KMeans(n_clusters=K_OPTIMAL, random_state=42, n_init=10)
-df["cluster"] = kmeans_final.fit_predict(X_scaled)
+    fig, ax = plt.subplots(figsize=(8, 6))
+    scatter = ax.scatter(
+        df["Notes"],
+        df["Assiduité"],
+        c=df["cluster"],
+        cmap="viridis",
+        alpha=0.6,
+        s=20,
+    )
+    ax.scatter(
+        resume["Note_moyenne"],
+        resume["Assiduite_moyenne"],
+        c="red",
+        marker="X",
+        s=200,
+        edgecolors="black",
+        label="Centroïdes",
+    )
+    ax.set_xlabel("Note à l'évaluation (/20)")
+    ax.set_ylabel("Assiduité (%)")
+    ax.set_title(f"Clustering K-Means des élèves (K={k_optimal})")
+    ax.legend()
+    plt.colorbar(scatter, ax=ax, label="Cluster")
+    plt.tight_layout()
+    plt.savefig(dossier_fig / "visualisation_clusters_eleves.png", dpi=150)
+    plt.close()
 
-# on repasse les centroïdes à l'échelle réelle (note/20, assiduité en %)
-# pour pouvoir les lire normalement au lieu des valeurs standardisées
-centroides_reels = scaler.inverse_transform(kmeans_final.cluster_centers_)
-resume = pd.DataFrame(
-    centroides_reels, columns=["Note_moyenne", "Assiduite_moyenne"]
-)
-resume["effectif"] = df["cluster"].value_counts().sort_index().values
-print("\nRésumé des clusters :\n", resume)
+    chemin_interim = RACINE_PROJET / "data" / "interim"
+    chemin_interim.mkdir(parents=True, exist_ok=True)
+    pd.DataFrame({
+        "K": k_range,
+        "inertie": inerties,
+        "silhouette": silhouettes,
+    }).to_csv(chemin_interim / "choix_clusters_q3.csv", index=False)
 
-plt.figure(figsize=(8, 6))
-scatter = plt.scatter(
-    df["Notes"], df["Assiduité"], c=df["cluster"], cmap="viridis", alpha=0.6, s=20
-)
-centres_x = centroides_reels[:, 0]
-centres_y = centroides_reels[:, 1]
-plt.scatter(
-    centres_x, centres_y, c="red", marker="X", s=200,
-    edgecolors="black", label="Centroïdes"
-)
-plt.xlabel("Note à l'évaluation (/20)")
-plt.ylabel("Assiduité (%)")
-plt.title(f"Clustering K-means des élèves (K={K_OPTIMAL})")
-plt.legend()
-plt.colorbar(scatter, label="Cluster")
-plt.tight_layout()
-plt.savefig("../../reports/figures/visualisation_clusters_eleves.png", dpi=150)
-plt.close()
+    chemin_processed = RACINE_PROJET / "data" / "processed"
+    chemin_processed.mkdir(parents=True, exist_ok=True)
+    df.to_csv(chemin_processed / "donnees_eleves_avec_profil.csv", index=False)
+    resume.to_csv(dossier_fig / "profils_clusters_resume.csv", index=False)
 
-df.to_csv("../../data/processed/donnees_eleves_avec_profil.csv", index=False)
-resume.to_csv("../../reports/figures/profils_clusters_resume.csv", index=False)
+    return {
+        "k_optimal": k_optimal,
+        "inerties": dict(zip(k_range, inerties)),
+        "silhouettes": dict(zip(k_range, silhouettes)),
+        "resume_clusters": resume,
+        "donnees_avec_cluster": df,
+    }
 
-print("\nFichiers générés : reports/figures/graphique_choix_nombre_clusters.png, reports/figures/visualisation_clusters_eleves.png,")
-print("data/processed/donnees_eleves_avec_profil.csv, reports/figures/profils_clusters_resume.csv")
+
+if __name__ == "__main__":
+    resultats = executer_clustering()
+
+    print("=== Question 3 — Clustering K-Means ===")
+    print(f"Nombre de profils retenus : K = {resultats['k_optimal']}")
+    print("\nRésumé des clusters :")
+    print(resultats["resume_clusters"].to_string(index=False))
+    print("\nFigures sauvegardées dans reports/figures/ et data/processed/")

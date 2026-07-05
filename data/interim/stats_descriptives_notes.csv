@@ -1,0 +1,14 @@
+,Notes
+count,1000.0
+mean,9.903
+std,5.873166529657151
+min,0.0
+25%,4.8
+50%,9.75
+75%,15.1
+max,20.0
+IQR,10.3
+borne_basse_tukey,-10.650000000000002
+borne_haute_tukey,30.55
+nb_outliers_bas,0.0
+nb_outliers_haut,0.0
